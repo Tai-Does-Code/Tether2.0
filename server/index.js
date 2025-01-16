@@ -1,56 +1,45 @@
-///////////////////////////////
 // Imports
-///////////////////////////////
-
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const User = require('./models/User');
 
 // middleware imports
 const handleCookieSessions = require('./middleware/handleCookieSessions');
 const logRoutes = require('./middleware/logRoutes');
-const checkAuthentication = require('./middleware/checkAuthentication');
 
 // controller imports
-const authControllers = require('./controllers/authControllers');
-const userControllers = require('./controllers/userControllers');
+const authRouter = require('./middleware/routes/authRouter');
+const userRouter = require('./middleware/routes/userRouter');
+const goalRouter = require('./middleware/routes/goalRouter');
+const reminderRouter = require('./middleware/routes/reminderRouter');
+const ritualRouter = require('./middleware/routes/ritualRouter');
+const questRouter = require('./middleware/routes/questRouter');
+const { updateUser } = require('./controllers/userControllers');
+
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {origin: '*'}
+});
 
 // middleware
 app.use(handleCookieSessions); // adds a session property to each request representing the cookie
 app.use(logRoutes); // print information about each incoming request
 app.use(express.json()); // parse incoming request bodies as JSON
 app.use(express.static(path.join(__dirname, '../frontend/dist'))); // Serve static assets from the dist folder of the frontend
+app.use(cors());
 
-
-
-///////////////////////////////
-// Auth Routes
-///////////////////////////////
-
-app.get('/api/me', authControllers.showMe);
-app.post('/api/login', authControllers.loginUser);
-app.delete('/api/logout', authControllers.logoutUser);
-
-
-
-///////////////////////////////
-// User Routes
-///////////////////////////////
-
-app.post('/api/users', userControllers.createUser);
-
-// These actions require users to be logged in (authentication)
-// Express lets us pass a piece of middleware to run for a specific endpoint
-app.get('/api/users', checkAuthentication, userControllers.listUsers);
-app.get('/api/users/:id', checkAuthentication, userControllers.showUser);
-app.patch('/api/users/:id', checkAuthentication, userControllers.updateUser);
-
-
-
-///////////////////////////////
-// Fallback Route
-///////////////////////////////
+// Routes
+app.use('/api', authRouter);
+app.use('/api/users', userRouter);
+app.use('/api/goals', goalRouter);
+app.use('/api/reminders', reminderRouter);
+app.use('/api/rituals', ritualRouter);
+app.use('/api/questionnaire', questRouter);
 
 // Requests meant for the API will be sent along to the router.
 // For all other requests, send back the index.html file in the dist folder.
@@ -60,12 +49,22 @@ app.get('*', (req, res, next) => {
 });
 
 
+io.on("connection", (socket) => {
+  // console.log('someone connected');
+  let user_id = null;
+  socket.on('user', (userId) => {
+    user_id = userId;
+    User.setOnline(userId, true);
+  })
+  socket.on('disconnect', () => {
+    User.setOnline(user_id, false);
+  });
 
-///////////////////////////////
-// Start Listening
-///////////////////////////////
+  socket.on('chat message', (msg, sender) => {
+    // console.log('someone messaged');
+    io.emit('chat message', msg, sender);
+  });
+})
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}/`);
-});
+server.listen(port);
