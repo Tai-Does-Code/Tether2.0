@@ -9,10 +9,18 @@ class User {
   // static methods to hide the hashed password of users before sending user data 
   // to the client. Since we want to keep the #passwordHash property private, we 
   // provide the isValidPassword instance method as a way to indirectly access it.
-  constructor({ id, username, password_hash }) {
+  constructor({ id, first_name, last_name, username, email, password_hash, is_online, is_partnered, partner_id, bio, quest_flag}) {
     this.id = id;
+    this.first_name = first_name;
+    this.last_name = last_name;
     this.username = username;
+    this.email = email;
     this.#passwordHash = password_hash;
+    this.is_online = is_online;
+    this.is_partnered = is_partnered;
+    this.partner_id = partner_id;
+    this.bio = bio;
+    this.quest_flag = quest_flag;
   }
 
   // This instance method takes in a plain-text password and returns true if it matches
@@ -53,33 +61,58 @@ class User {
   // Hashes the given password and then creates a new user
   // in the users table. Returns the newly created user, using
   // the constructor to hide the passwordHash. 
-  static async create(username, password) {
+  static async create(first_name, last_name, username, email, password) {
     // hash the plain-text password using bcrypt before storing it in the database
     const passwordHash = await authUtils.hashPassword(password);
 
-    const query = `INSERT INTO users (username, password_hash)
-      VALUES (?, ?) RETURNING *`;
-    const result = await knex.raw(query, [username, passwordHash]);
+    const query = `INSERT INTO users (first_name, last_name, username, email, password_hash, is_online, is_partnered, bio, quest_flag)
+      VALUES (?, ?, ?, ?, ?, false, false, 'No bio', false) RETURNING *`;
+    const result = await knex.raw(query, [first_name, last_name, username, email, passwordHash]);
     const rawUserData = result.rows[0];
     return new User(rawUserData);
   }
 
   // Updates the user that matches the given id with a new username.
   // Returns the modified user, using the constructor to hide the passwordHash. 
-  static async update(id, username) {
+  static async update(id, target, value) {
     const query = `
       UPDATE users
-      SET username=?
+      SET ??=?
       WHERE id=?
       RETURNING *
     `
-    const result = await knex.raw(query, [username, id])
+    const result = await knex.raw(query, [target, value, id])
     const rawUpdatedUser = result.rows[0];
     return rawUpdatedUser ? new User(rawUpdatedUser) : null;
   };
 
   static async deleteAll() {
     return knex('users').del()
+  }
+
+  static async setOnline(id, value) {
+    const query = `
+      UPDATE users
+      SET is_online=?
+      WHERE id=?
+      RETURNING *
+    `
+    const result = await knex.raw(query, [value, id]);
+    const rawUpdatedUser = result.rows[0];
+    return rawUpdatedUser ? new User(rawUpdatedUser) : null;
+  }
+
+  static async getUnmatchedUsers() {
+    const query = `
+      SELECT * FROM users
+      WHERE is_partnered = false;
+    `
+    const result = await knex.raw(query);
+    return result.rows.map((rawUserData) => new User(rawUserData));
+  }
+
+  static async saveQuestionnaire() {
+    const query = ``
   }
 }
 
